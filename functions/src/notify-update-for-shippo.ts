@@ -3,10 +3,11 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { IncomingWebhook } from "@slack/webhook";
 import * as admin from "firebase-admin";
+import * as cheerio from "cheerio";
 
 const SLACK_WEBHOOK_URL = defineSecret("SLACK_WEBHOOK_URL");
 
-const URL =
+const TARGET_URL =
   "https://www.rabbittail.com/product/catalog/s/default/t/category/ca/rabbit/txt1/rabbit/v/b/cf9280/9281/cf9304/9305/n/100#search_area";
 
 admin.initializeApp();
@@ -15,10 +16,31 @@ const db = admin.firestore();
 async function getPageContent(url: string): Promise<string> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Error occurred. Status code
-: ${response.status}`);
+    throw new Error(`Error occurred. Status code: ${response.status}`);
   }
   return await response.text();
+}
+
+function extractItems(html: string): { url: string; name: string }[] {
+  const root = cheerio.load(html);
+  const items: { url: string; name: string }[] = [];
+
+  const itemElements = root(".item_box");
+  itemElements.each((_index, element) => {
+    const item = root(element);
+    const linkElement = item.find(".imb_box_150 a");
+    const nameElement = item.find(".name a");
+
+    const relativeUrl = linkElement.attr("href");
+    const name = nameElement.text().trim();
+
+    if (relativeUrl && name) {
+      const url = `https://www.rabbittail.com${relativeUrl}`;
+      items.push({ url, name });
+    }
+  });
+
+  return items;
 }
 
 export const notifyUpdateForShippo = onSchedule(
@@ -35,21 +57,33 @@ export const notifyUpdateForShippo = onSchedule(
       const slackWebhookUrl = SLACK_WEBHOOK_URL.value();
       const webhook = new IncomingWebhook(slackWebhookUrl);
 
-      const currentContent = await getPageContent(URL);
-      const docRef = db.collection("shippo-website-histories").doc("content");
+      const htmlContent = await getPageContent(TARGET_URL);
+
+      const currentItems = extractItems(htmlContent);
+
+      const docRef = db.collection("shippo-website-histories").doc("items");
 
       const doc = await docRef.get();
-      const previousContent = doc.exists ? doc.data()?.content : null;
+      const previousItems: { url: string; name: string }[] = doc.exists
+        ? doc.data()?.items || []
+        : [];
 
-      if (previousContent && currentContent !== previousContent) {
-        const message = `Update detected, ${URL}`;
-        await webhook.send({ text: message });
-        logger.info("Send message to Slack", message);
+      const previousUrls = new Set(previousItems.map((item) => item.url));
+      const newItems = currentItems.filter(
+        (item) => !previousUrls.has(item.url)
+      );
+
+      if (newItems.length > 0) {
+        for (const item of newItems) {
+          const message = `新しい子がデビューしました！\n<${item.url}|${item.name}>`;
+          await webhook.send({ text: message });
+          logger.info("Sent message to Slack", { item });
+        }
       } else {
-        logger.info("No update detected");
+        logger.info("No new items detected");
       }
 
-      await docRef.set({ content: currentContent });
+      await docRef.set({ items: currentItems });
     } catch (error) {
       logger.error("Error occurred", { error });
     }
