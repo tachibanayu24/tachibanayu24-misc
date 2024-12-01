@@ -74,11 +74,13 @@ export const notifyUpdateForShippo = onSchedule(
       );
 
       if (newItems.length > 0) {
+        let message = "新しい子がデビューしました！\n";
         for (const item of newItems) {
-          const message = `新しい子がデビューしました！\n<${item.url}|${item.name}>`;
-          await webhook.send({ text: message });
-          logger.info("Sent message to Slack", { item });
+          message = `<${item.url}|🐰 ${item.name}>\n`;
         }
+
+        await webhook.send({ text: message });
+        logger.info("Sent message to Slack", { message });
       } else {
         logger.info("No new items detected");
       }
