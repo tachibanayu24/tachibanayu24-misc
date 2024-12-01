@@ -74,7 +74,7 @@ export const notifyUpdateForShippo = onSchedule(
       );
 
       if (newItems.length > 0) {
-        let message = "新しい子がデビューしました！\n";
+        let message = "<!channel> 新しい子がデビューしました！\n";
         for (const item of newItems) {
           message = `<${item.url}|🐰 ${item.name}>\n`;
         }
