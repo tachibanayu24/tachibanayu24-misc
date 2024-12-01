@@ -30,7 +30,8 @@ export const notifyUpdateForShippo = onSchedule(
   },
   async (_event) => {
     try {
-      // シークレットの値を取得
+      logger.info("Start notifyUpdateForShippo");
+
       const slackWebhookUrl = SLACK_WEBHOOK_URL.value();
       const webhook = new IncomingWebhook(slackWebhookUrl);
 
@@ -41,17 +42,16 @@ export const notifyUpdateForShippo = onSchedule(
       const previousContent = doc.exists ? doc.data()?.content : null;
 
       if (previousContent && currentContent !== previousContent) {
-        const message = `ウェブサイトが更新されました: ${URL}`;
+        const message = `Update detected, ${URL}`;
         await webhook.send({ text: message });
-        logger.info("更新を検知し、Slackに通知しました。", message);
+        logger.info("Send message to Slack", message);
       } else {
-        logger.info("変更は検出されませんでした。");
+        logger.info("No update detected");
       }
 
-      // 現在のコンテンツを保存
       await docRef.set({ content: currentContent });
     } catch (error) {
-      logger.error(`エラーが発生しました: ${error}`);
+      logger.error("Error occurred", { error });
     }
   }
 );
