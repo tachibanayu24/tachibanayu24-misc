@@ -76,7 +76,7 @@ export const notifyUpdateForShippo = onSchedule(
       if (newItems.length > 0) {
         let message = "<!channel> 新しい子がデビューしました！\n";
         for (const item of newItems) {
-          message = `<${item.url}|🐰 ${item.name}>\n`;
+          message += `<${item.url}|🐰 ${item.name}>\n`;
         }
 
         await webhook.send({ text: message });
