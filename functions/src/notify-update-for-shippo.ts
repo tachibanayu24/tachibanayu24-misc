@@ -1,7 +1,7 @@
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
-import { IncomingWebhook } from "@slack/webhook";
+import { IncomingWebhook, IncomingWebhookSendArguments } from "@slack/webhook";
 import * as admin from "firebase-admin";
 import * as cheerio from "cheerio";
 
@@ -21,22 +21,31 @@ async function getPageContent(url: string): Promise<string> {
   return await response.text();
 }
 
-function extractItems(html: string): { url: string; name: string }[] {
+function extractItems(
+  html: string
+): { url: string; name: string; imageUrl: string }[] {
   const root = cheerio.load(html);
-  const items: { url: string; name: string }[] = [];
+  const items: { url: string; name: string; imageUrl: string }[] = [];
 
   const itemElements = root(".item_box");
   itemElements.each((_index, element) => {
     const item = root(element);
     const linkElement = item.find(".imb_box_150 a");
     const nameElement = item.find(".name a");
+    const imgElement = linkElement.find("img");
 
     const relativeUrl = linkElement.attr("href");
     const name = nameElement.text().trim();
+    const imageUrl = imgElement.attr("src")?.trim();
 
     if (relativeUrl && name) {
       const url = `https://www.rabbittail.com${relativeUrl}`;
-      items.push({ url, name });
+      const fullImageUrl = imageUrl
+        ? imageUrl?.startsWith("http")
+          ? imageUrl
+          : `https://www.rabbittail.com${imageUrl}`
+        : "";
+      items.push({ url, name, imageUrl: fullImageUrl });
     }
   });
 
@@ -74,13 +83,33 @@ export const notifyUpdateForShippo = onSchedule(
       );
 
       if (newItems.length > 0) {
-        let message = "<!channel> 新しい子がデビューしました！\n";
-        for (const item of newItems) {
-          message += `<${item.url}|🐰 ${item.name}>\n`;
-        }
+        const blocks: IncomingWebhookSendArguments["blocks"] = [];
 
-        await webhook.send({ text: message });
-        logger.info("Sent message to Slack", { message });
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "<!channel> 新しい子がデビューしました！",
+          },
+        });
+
+        newItems.forEach((item) => {
+          blocks.push({
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `🐰 <${item.url}|${item.name}>`,
+            },
+            accessory: {
+              type: "image",
+              image_url: item.imageUrl,
+              alt_text: item.name,
+            },
+          });
+        });
+
+        await webhook.send({ blocks });
+        logger.info("Sent message to Slack", { newItems });
       } else {
         logger.info("No new items detected");
       }
