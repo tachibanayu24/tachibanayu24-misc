@@ -55,7 +55,7 @@ function extractItems(
 export const notifyUpdateForShippo = onSchedule(
   {
     region: "asia-northeast1",
-    schedule: "0,30 8-21 * * *",
+    schedule: "0 19 * * *",
     timeZone: "Asia/Tokyo",
     secrets: [SLACK_WEBHOOK_URL],
   },
@@ -89,7 +89,7 @@ export const notifyUpdateForShippo = onSchedule(
           type: "section",
           text: {
             type: "mrkdwn",
-            text: "<!channel> 新しい子がデビューしました！",
+            text: "新しい子がデビューしました！",
           },
         });
 
